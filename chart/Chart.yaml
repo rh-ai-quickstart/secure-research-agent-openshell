@@ -1,0 +1,8 @@
+apiVersion: v2
+name: secure-research-agent
+description: Deploy AIQ research agents inside NVIDIA OpenShell sandboxes on OpenShift
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: mtalvi

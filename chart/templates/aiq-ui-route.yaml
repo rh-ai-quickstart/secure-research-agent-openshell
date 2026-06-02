@@ -1,0 +1,19 @@
+{{- if .Values.ui.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: aiq-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "secure-research-agent.labels" . | nindent 4 }}
+    app: aiq-ui
+spec:
+  to:
+    kind: Service
+    name: aiq-ui
+  port:
+    targetPort: 3000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

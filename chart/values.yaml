@@ -1,0 +1,51 @@
+---
+# API keys for the research agent (required)
+apiKeys:
+  nvidia: ""
+  tavily: ""
+
+# AIQ sandbox image
+sandbox:
+  image: quay.io/rh-ai-quickstart/aiq-openshell:latest
+  name: aiq-sandbox
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  storage: 2Gi
+
+# AIQ UI
+ui:
+  enabled: true
+  image: quay.io/rh-ai-quickstart/aiq-ui:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# OpenShell gateway (deployed via subchart)
+openshell:
+  chartVersion: "0.0.48"
+  gateway:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+# Sandbox configuration
+config:
+  configFile: /app/configs/config_web_default_llamaindex.yml
+  host: "0.0.0.0"
+  port: 8000
+  proxyHost: "10.200.0.1"
+  proxyPort: 3128

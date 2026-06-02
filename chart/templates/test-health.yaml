@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-health"
+  labels:
+    {{- include "secure-research-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-health
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing AIQ backend health..."
+          curl -sf --max-time 10 \
+            "http://aiq-backend.{{ .Release.Namespace }}.svc:8000/health"
+          if [ $? -eq 0 ]; then
+            echo ""
+            echo "SUCCESS: AIQ backend is healthy."
+          else
+            echo "FAILED: AIQ backend health check failed."
+            exit 1
+          fi
+
+          echo "Testing available agents..."
+          curl -sf --max-time 10 \
+            "http://aiq-backend.{{ .Release.Namespace }}.svc:8000/v1/jobs/async/agents"
+          if [ $? -eq 0 ]; then
+            echo ""
+            echo "SUCCESS: Agent API is responding."
+          else
+            echo "FAILED: Agent API is not responding."
+            exit 1
+          fi
