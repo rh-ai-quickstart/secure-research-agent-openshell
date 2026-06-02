@@ -377,7 +377,7 @@ oc delete project $NAMESPACE
 ## References
 
 - [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) — Sandboxed runtime for autonomous AI agents
-- [NVIDIA AIQ](https://github.com/NVIDIA/AIQ) — AI research agent toolkit
+- [NVIDIA AIQ](https://build.nvidia.com/nvidia/aiq) — AI research agent blueprint
 - [OpenShift Documentation](https://docs.openshift.com/)
 - [Landlock LSM](https://docs.kernel.org/userspace-api/landlock.html) — Linux kernel filesystem isolation
 - [Agent Sandbox CRDs](https://github.com/kubernetes-sigs/agent-sandbox) — Kubernetes sandbox resource definitions
