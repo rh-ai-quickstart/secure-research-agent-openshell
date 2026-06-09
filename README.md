@@ -145,7 +145,13 @@ If you build your own images, update the image references in `chart/values.yaml`
 
 #### 4. Deploy
 
-The recommended way is the Makefile, which handles CRDs, JWT keys, the OpenShell gateway, the AIQ chart, and sandbox creation in the correct order:
+There are two deployment approaches:
+
+**Option A — AI-agent-driven (skill-based):**
+
+Point your AI coding agent (Cursor, Claude, etc.) at the project and ask it to deploy. The agent will discover and follow the deployment skill at `.cursor/skills/deploy-aiq-openshell/SKILL.md`, which covers the full stack end to end. A separate skill for gateway-only deployment is available at `.cursor/skills/deploy-openshell-openshift/SKILL.md`.
+
+**Option B — Makefile (manual/scripted):**
 
 ```bash
 make install \
@@ -344,6 +350,11 @@ oc delete project $NAMESPACE
 
 ```
 .
+├── .cursor/skills/               # AI agent deployment skills
+│   ├── deploy-openshell-openshift/  # Gateway-only deployment on OpenShift
+│   │   └── SKILL.md
+│   └── deploy-aiq-openshell/       # Full-stack AIQ + OpenShell deployment
+│       └── SKILL.md
 ├── chart/                        # Helm chart for OpenShift deployment
 │   ├── Chart.yaml                # Chart metadata and dependencies
 │   ├── values.yaml               # Default configuration (images, API keys, resources)
@@ -377,7 +388,7 @@ oc delete project $NAMESPACE
 ## References
 
 - [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) — Sandboxed runtime for autonomous AI agents
-- [NVIDIA AIQ](https://build.nvidia.com/nvidia/aiq) — AI research agent blueprint
+- [NVIDIA AIQ](https://github.com/NVIDIA/AIQ) — AI research agent toolkit
 - [OpenShift Documentation](https://docs.openshift.com/)
 - [Landlock LSM](https://docs.kernel.org/userspace-api/landlock.html) — Linux kernel filesystem isolation
 - [Agent Sandbox CRDs](https://github.com/kubernetes-sigs/agent-sandbox) — Kubernetes sandbox resource definitions

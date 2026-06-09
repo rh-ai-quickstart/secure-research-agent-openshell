@@ -29,6 +29,8 @@ ui:
     limits:
       cpu: 500m
       memory: 512Mi
+  cacheGuard:
+    image: nginxinc/nginx-unprivileged:1-alpine
 
 # OpenShell gateway (deployed via subchart)
 openshell:

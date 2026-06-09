@@ -21,8 +21,10 @@ spec:
         - name: ui
           image: {{ .Values.ui.image }}
           ports:
-            - containerPort: 3000
+            - containerPort: 3001
           env:
+            - name: PORT
+              value: "3001"
             - name: BACKEND_URL
               value: "http://aiq-backend.{{ .Release.Namespace }}.svc:8000"
             - name: REQUIRE_AUTH
@@ -31,4 +33,23 @@ spec:
               value: "production"
           resources:
             {{- toYaml .Values.ui.resources | nindent 12 }}
+        - name: cache-guard
+          image: {{ .Values.ui.cacheGuard.image | default "nginxinc/nginx-unprivileged:1-alpine" }}
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: aiq-ui-nginx-config
 {{- end }}

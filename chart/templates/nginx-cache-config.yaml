@@ -1,0 +1,54 @@
+{{- if .Values.ui.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiq-ui-nginx-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "secure-research-agent.labels" . | nindent 4 }}
+data:
+  nginx.conf: |
+    pid /tmp/nginx.pid;
+    worker_processes auto;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        client_body_temp_path /tmp/client_temp;
+        proxy_temp_path       /tmp/proxy_temp;
+        fastcgi_temp_path     /tmp/fastcgi_temp;
+        uwsgi_temp_path       /tmp/uwsgi_temp;
+        scgi_temp_path        /tmp/scgi_temp;
+
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        access_log /dev/stdout;
+        error_log  /dev/stderr warn;
+
+        map $http_upgrade $connection_upgrade {
+            default upgrade;
+            ''      close;
+        }
+
+        server {
+            listen 3000;
+
+            location / {
+                proxy_pass http://127.0.0.1:3001;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection $connection_upgrade;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header Accept-Encoding "";
+
+                sub_filter '</head>' '<script>(function(){var d="{{ .Release.Revision }}-{{ now | unixEpoch }}";var k="_aiqDeployId";if(localStorage.getItem(k)!==d){localStorage.clear();localStorage.setItem(k,d);if(location.search.includes("session=")){location.href="/";}}})();</script></head>';
+                sub_filter_once on;
+            }
+        }
+    }
+{{- end }}
