@@ -1,9 +1,10 @@
-# AIQ configuration for OpenShell sandbox with credential isolation.
+# AIQ configuration for OpenShell sandbox with full credential isolation.
 #
-# All NVIDIA NIM endpoints use https://inference.local/v1 instead of
-# https://integrate.api.nvidia.com/v1. The OpenShell egress proxy intercepts
-# requests to inference.local and injects the NVIDIA API key from the
-# gateway-managed provider — the key never enters the sandbox.
+# All NVIDIA NIM endpoints (LLM chat and embeddings) use
+# https://inference.local/v1. The supervisor loads a standalone inference
+# routes file at startup (OPENSHELL_INFERENCE_ROUTES) that maps chat and
+# embedding protocols to separate upstream routes. The NVIDIA API key is
+# injected by the supervisor — it never enters the sandbox process.
 #
 # Tavily web search still uses its own API key via environment variable
 # (no inference routing for non-LLM endpoints).

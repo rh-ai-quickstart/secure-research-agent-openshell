@@ -21,7 +21,7 @@ NAMESPACE="${NAMESPACE:-openshell}"
 RELEASE_NAME="${RELEASE_NAME:-secure-research-agent}"
 OPENSHELL_RELEASE="${OPENSHELL_RELEASE:-openshell}"
 CHART_REF="${CHART_REF:-oci://ghcr.io/nvidia/openshell/helm-chart}"
-CHART_VERSION="${CHART_VERSION:-0.0.48}"
+CHART_VERSION="${CHART_VERSION:-0.0.0-dev}"
 NVIDIA_API_KEY="${NVIDIA_API_KEY}"               # required
 TAVILY_API_KEY="${TAVILY_API_KEY}"               # required
 SANDBOX_IMAGE="${SANDBOX_IMAGE:-quay.io/rh-ai-quickstart/aiq-openshell:latest}"
@@ -68,17 +68,16 @@ requires cleanup (`helm upgrade`, provider delete/recreate).
 ### Create `.openshell.env` from template
 
 If `.openshell.env` does not exist, create it from `config/openshell.env.template`
-and fill in both API keys. The NVIDIA key is needed for:
-- LLM inference: routed through `inference.local` (credential isolation via gateway)
-- Embeddings: sent directly to `integrate.api.nvidia.com` (the gateway's
-  inference routing only supports `/v1/chat/completions`, not `/v1/embeddings`)
+and fill in the Tavily key. The NVIDIA key stays as a placeholder in the env
+file — it is passed to the supervisor via `--env` on `sandbox create` and
+injected by the inference routing proxy. Only the Tavily key (a non-inference
+service) needs to be in the sandbox environment.
 
 ```bash
 if [ ! -f .openshell.env ]; then
   cp config/openshell.env.template .openshell.env
-  sed -i "s|NVIDIA_API_KEY=nvapi-\.\.\.|NVIDIA_API_KEY=${NVIDIA_API_KEY}|" .openshell.env
   sed -i "s|TAVILY_API_KEY=tvly-\.\.\.|TAVILY_API_KEY=${TAVILY_API_KEY}|" .openshell.env
-  echo "Created .openshell.env from template with both API keys."
+  echo "Created .openshell.env from template with Tavily key."
 else
   echo ".openshell.env already exists."
 fi
@@ -131,10 +130,19 @@ oc adm policy add-scc-to-user privileged -z openshell-sandbox -n "${NAMESPACE}"
 
 ### Step 5 — Deploy OpenShell gateway
 
+**IMPORTANT — Supervisor version**: Embedding routing through `inference.local`
+requires supervisor **≥ 0.0.63** (PR #1774). Chart version `0.0.48` ships
+supervisor 0.0.48 which does NOT support `/v1/embeddings` — embedding requests
+get `403 connection not allowed by policy`. Use `0.0.0-dev` (or a tagged
+release ≥ 0.0.63 once available) and set `image.tag` / `supervisor.image.tag`
+accordingly.
+
 ```bash
 helm install "${OPENSHELL_RELEASE}" "${CHART_REF}" \
   --version "${CHART_VERSION}" \
   -n "${NAMESPACE}" \
+  --set "image.tag=dev" \
+  --set "supervisor.image.tag=dev" \
   --set pkiInitJob.enabled=false \
   --set server.disableTls=true \
   --set server.auth.allowUnauthenticatedUsers=true \
@@ -192,12 +200,21 @@ port-forward and retry.
 
 ### Step 9 — Create sandbox
 
+The `--env NVIDIA_API_KEY` passes the real key to the container environment
+where the supervisor reads it (via `api_key_env` in the inference routes
+file). The sandbox process itself only has the placeholder from `.openshell.env`.
+
+**IMPORTANT — CLI version**: The `--env` flag requires `openshell` CLI **≥ 0.0.62**.
+Check with `openshell --version`. Upgrade with `pip install --upgrade openshell`
+if needed.
+
 ```bash
 openshell sandbox create \
   --from "${SANDBOX_IMAGE}" \
   --name "${SANDBOX_NAME}" \
   --provider nvidia \
   --policy "${EGRESS_POLICY}" \
+  --env "NVIDIA_API_KEY=${NVIDIA_API_KEY}" \
   --no-tty
 ```
 
@@ -219,7 +236,7 @@ kubectl wait --for=condition=Ready "pod/${SANDBOX_NAME}" -n "${NAMESPACE}" --tim
 ### Step 10 — Copy environment and config files
 
 ```bash
-# Copy .env (Tavily key, proxy config, NVIDIA_API_KEY placeholder)
+# Copy .env (Tavily key, proxy config, embedding base URL; NVIDIA_API_KEY is a placeholder)
 if [ -f .openshell.env ]; then
   oc cp .openshell.env "${NAMESPACE}/${SANDBOX_NAME}:/sandbox/.env" -c agent
 else
@@ -361,10 +378,12 @@ oc delete project "${NAMESPACE}"
 | `SSL: CERTIFICATE_VERIFY_FAILED` | Missing ephemeral CA trust | Run Step 11; ensure `SSL_CERT_FILE` etc. are **uncommented** in `.env` (not prefixed with `#`) |
 | `SSL_CERT_FILE` is empty at runtime | Template had CA vars commented out; `grep -q SSL_CERT_FILE` matched the comment and skipped | Use `grep -q "^SSL_CERT_FILE="` (anchored match) or ensure template has vars uncommented |
 | `403 Forbidden` from egress proxy | Agent running in root namespace | Start agent via `nsenter` (Step 13), not plain `oc exec` |
-| `403 - connection not allowed by policy` on embeddings | Gateway inference routing only supports `/v1/chat/completions`, not `/v1/embeddings` | Add `integrate.api.nvidia.com:443` to egress policy; set real `NVIDIA_API_KEY` in `.env` |
+| `403 - connection not allowed by policy` on embeddings | Supervisor too old (< 0.0.63), or `AIQ_EMBED_BASE_URL` not set, or routes file missing | Upgrade to chart `0.0.0-dev` with `image.tag=dev` / `supervisor.image.tag=dev`; verify `AIQ_EMBED_BASE_URL=https://inference.local/v1` in `.env` and `OPENSHELL_INFERENCE_ROUTES` is set in the Containerfile |
+| `410 Gone — model has reached end of life` on embeddings | Embedding model in `inference-routes.yaml` is deprecated | Update the `model` in the `openai_embeddings` route in `config/inference-routes.yaml` to the current model (e.g. `nvidia/llama-nemotron-embed-vl-1b-v2`), rebuild and push image, then recreate sandbox |
 | `address already in use :8000` | TCP proxy and agent in same namespace | TCP proxy runs in root NS (`oc exec`), agent in sandbox NS (`nsenter`) |
 | Image pull timeout | Registry unavailable | Delete sandbox and recreate; pod retries automatically |
-| `Missing required API keys: NVIDIA_API_KEY` | Key missing from `.env` | Set real `NVIDIA_API_KEY` in `.env` (needed for embeddings); re-copy and restart agent |
+| `chown: Invalid argument` during `podman build` | Containerfile uses UID 1000660000 which exceeds rootless podman's subuid range | Temporarily change the UID/GID in the Containerfile to a value within range (e.g. 65532), build and push, then revert. OpenShift assigns its own UID via SCC at runtime so the build-time value doesn't matter. Alternatively use `sudo podman build` if available |
+| `environment variable NVIDIA_API_KEY not set for route` | Supervisor cannot find NVIDIA key for inference routing | Ensure `--env NVIDIA_API_KEY=${NVIDIA_API_KEY}` was passed on `openshell sandbox create` (Step 9) |
 | `Missing provider: nvidia` on sandbox create | `provider create` failed silently | Re-establish port-forward, then run `openshell provider create` without `2>/dev/null` (Step 8) |
 | `provider has no usable API key credential` on `inference set` | `provider create` ran with empty `NVIDIA_API_KEY` | Delete provider, verify key has non-trivial length, then recreate (see Step 0 caveat about agent shell) |
 | Stale conversations in UI after redeployment | Browser localStorage from prior deploy | Handled automatically by the `cache-guard` nginx sidecar — it injects a deployment-versioned script that clears stale localStorage on first load after a redeploy. If the sidecar is not present (pre-v3 chart), clear browser localStorage manually or open in incognito |
@@ -373,19 +392,20 @@ oc delete project "${NAMESPACE}"
 
 | Service | Endpoint | Access method | Credential handling |
 |---------|----------|--------------|-------------------|
-| NVIDIA NIM (LLM) | `inference.local` | Proxy-routed | Key injected by gateway — credential isolation |
-| NVIDIA Embeddings | `integrate.api.nvidia.com` | Direct via `network_policies` | Real key in sandbox `.env` |
+| NVIDIA NIM (LLM) | `inference.local` | Supervisor proxy via inference routes file | Key injected by supervisor — never in sandbox |
+| NVIDIA Embeddings | `inference.local` | Supervisor proxy via inference routes file | Key injected by supervisor — never in sandbox |
 | Tavily | `api.tavily.com` | Direct via `network_policies` | Key in sandbox `.env` file |
 
-NVIDIA LLM inference uses OpenShell's inference routing proxy because it has
-a built-in provider profile. The gateway intercepts requests to `inference.local`
-and injects the API key.
+Both LLM and embedding traffic route through `inference.local`. A standalone
+inference routes file (`config/inference-routes.yaml`) is baked into the
+sandbox image at `/app/inference-routes.yaml`. The supervisor loads it at
+startup via the `OPENSHELL_INFERENCE_ROUTES` env var. Each route uses
+`api_key_env: NVIDIA_API_KEY` — the supervisor reads the key from the
+container environment (passed via `--env` on `sandbox create`) and injects
+it into outgoing requests. The sandbox process only has a placeholder key.
 
-NVIDIA embeddings (knowledge layer) require direct access to
-`integrate.api.nvidia.com` because the gateway's inference routing only
-supports `/v1/chat/completions`, not `/v1/embeddings`. The egress policy
-includes `integrate.api.nvidia.com:443` and the real `NVIDIA_API_KEY` must
-be set in the sandbox `.env`.
+The egress policy blocks `integrate.api.nvidia.com`, so even if the sandbox
+process somehow obtained the real key, it cannot use it directly.
 
 Tavily uses a direct endpoint because it is a non-inference service without
 a provider profile.
