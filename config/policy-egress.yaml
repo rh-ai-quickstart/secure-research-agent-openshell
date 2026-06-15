@@ -1,14 +1,9 @@
 # OpenShell sandbox egress policy for the AIQ research agent.
 #
-# NVIDIA NIM (LLM inference) uses credential isolation via the OpenShell
-# inference routing proxy (inference.local). The NVIDIA API key is stored
-# at the gateway level and injected by the proxy — it never enters the
-# sandbox.
-#
-# NVIDIA embeddings (knowledge layer) require direct access to
-# integrate.api.nvidia.com because the gateway's inference routing only
-# supports /v1/chat/completions, not /v1/embeddings. The real NVIDIA API
-# key must be set in the sandbox .env for embedding calls.
+# All NVIDIA traffic (LLM chat and embeddings) is routed through
+# inference.local via the standalone inference routes file baked into the
+# image. The NVIDIA API key is injected by the supervisor and never
+# enters the sandbox process's environment.
 #
 # Tavily (web search) is allowed as a direct endpoint.
 # To add additional services, append entries under network_policies.
@@ -39,13 +34,3 @@ network_policies:
       - { path: /app/.venv/bin/dask-worker }
       - { path: /app/.venv/bin/dask-scheduler }
       - { path: /usr/bin/curl }
-  aiq_nvidia_embeddings:
-    name: aiq_nvidia_embeddings
-    endpoints:
-      - { host: integrate.api.nvidia.com, port: 443 }
-    binaries:
-      - { path: /app/.venv/bin/python }
-      - { path: /app/.venv/bin/python3.12 }
-      - { path: /usr/bin/python3.12 }
-      - { path: /app/.venv/bin/dask-worker }
-      - { path: /app/.venv/bin/dask-scheduler }

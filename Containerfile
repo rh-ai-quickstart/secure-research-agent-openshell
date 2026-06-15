@@ -96,6 +96,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=dev-builder /app /app
+COPY config/inference-routes.yaml /app/inference-routes.yaml
 
 RUN ln -sf /usr/bin/python3.12 /usr/local/bin/python \
     && ln -sf /usr/bin/python3.12 /usr/local/bin/python3
@@ -118,5 +119,6 @@ ENV NAT_JOB_STORE_DB_URL=sqlite+aiosqlite:////sandbox/data/jobs.db
 ENV AIQ_CHROMA_DIR=/sandbox/data/chroma_data
 ENV AIQ_CHECKPOINT_DB=/sandbox/data/checkpoints.db
 ENV AIQ_SUMMARY_DB=sqlite+aiosqlite:////sandbox/data/summaries.db
+ENV OPENSHELL_INFERENCE_ROUTES=/app/inference-routes.yaml
 
 EXPOSE 8000

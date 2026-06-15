@@ -87,7 +87,7 @@ This quickstart deploys a complete research agent stack — NVIDIA AIQ with Dask
 | Helm | 3.12 or later |
 | `oc` CLI | 4.14 or later |
 | Docker or Podman | For building container images (workstation) |
-| OpenShell CLI | 0.0.48 or later ([install guide](https://github.com/NVIDIA/OpenShell#install)) |
+| OpenShell CLI | 0.0.62 or later ([install guide](https://github.com/NVIDIA/OpenShell#install)) |
 
 ### Required user permissions
 
@@ -181,9 +181,11 @@ oc create secret generic openshell-jwt-keys -n $NAMESPACE \
   --from-file=public.pem=/tmp/public.pem \
   --from-file=kid=/tmp/kid
 
-# 4. Deploy the OpenShell gateway
+# 4. Deploy the OpenShell gateway (dev — embedding routing requires supervisor ≥ 0.0.63)
 helm install openshell oci://ghcr.io/nvidia/openshell/helm-chart \
-  --version 0.0.48 -n $NAMESPACE \
+  --version 0.0.0-dev -n $NAMESPACE \
+  --set image.tag=dev \
+  --set supervisor.image.tag=dev \
   --set pkiInitJob.enabled=false \
   --set server.disableTls=true \
   --set server.auth.allowUnauthenticatedUsers=true \
@@ -209,12 +211,13 @@ openshell provider create --name nvidia --type nvidia \
 openshell inference set --provider nvidia \
   --model nvidia/nemotron-3-nano-30b-a3b --no-verify
 
-# 8. Create the sandbox
+# 8. Create the sandbox (--env passes the NVIDIA key to the supervisor for credential isolation)
 openshell sandbox create \
   --from quay.io/rh-ai-quickstart/aiq-openshell:latest \
   --name aiq-sandbox \
   --provider nvidia \
   --policy config/policy-egress.yaml \
+  --env "NVIDIA_API_KEY=$NVIDIA_API_KEY" \
   --no-tty
 ```
 
@@ -370,6 +373,7 @@ oc delete project $NAMESPACE
 │       └── test-health.yaml     # Helm test hook
 ├── config/
 │   ├── config_openshell.yml      # AIQ config with inference.local (credential isolation)
+│   ├── inference-routes.yaml     # Standalone inference routes (LLM + embeddings via inference.local)
 │   ├── policy-egress.yaml        # OpenShell sandbox egress policy
 │   └── openshell.env.template    # Environment variable template
 ├── scripts/
@@ -415,12 +419,13 @@ OpenShell provides five layers of kernel-enforced isolation. This quickstart imp
 
 The sandbox egress policy (`config/policy-egress.yaml`) works together with the inference routing proxy:
 
-| Endpoint | Access method | Credential handling |
-|----------|--------------|-------------------|
-| `integrate.api.nvidia.com` | Via `inference.local` (proxy-routed) | API key injected by gateway — never enters sandbox |
-| `api.tavily.com` | Direct via `network_policies` | API key in sandbox `.env` file |
+| Endpoint | Traffic type | Access method | Credential handling |
+|----------|-------------|--------------|-------------------|
+| `integrate.api.nvidia.com` | LLM chat | Via `inference.local` (supervisor proxy) | API key injected by supervisor — never enters sandbox |
+| `integrate.api.nvidia.com` | Embeddings | Via `inference.local` (supervisor proxy) | API key injected by supervisor — never enters sandbox |
+| `api.tavily.com` | Web search | Direct via `network_policies` | API key in sandbox `.env` file |
 
-NVIDIA NIM is **not** listed in `network_policies` — per OpenShell best practices, inference provider hosts should use credential isolation through `inference.local` instead. Tavily remains a direct endpoint because it is a non-inference service without a built-in provider profile.
+Both LLM and embedding traffic route through `inference.local` using a standalone inference routes file (`config/inference-routes.yaml`) baked into the sandbox image. NVIDIA NIM is **not** listed in `network_policies` — per OpenShell best practices, inference provider hosts should use credential isolation through `inference.local` instead. Tavily remains a direct endpoint because it is a non-inference service without a built-in provider profile.
 
 Any connection attempt to hosts not covered by `network_policies` or `inference.local` is blocked by the egress proxy. To add additional services, add entries under `network_policies` in the policy file.
 
@@ -445,12 +450,15 @@ The OpenShell egress proxy performs TLS inspection to enforce network policies o
 
 ### Credential isolation
 
-The NVIDIA API key is stored as an OpenShell **provider** at the gateway level, not inside the sandbox. The agent's LLM config (`config/config_openshell.yml`) points all model endpoints to `https://inference.local/v1`. When the agent makes an inference request:
+The NVIDIA API key never enters the sandbox process. Both LLM chat and embedding traffic route through `inference.local` using a standalone inference routes file (`config/inference-routes.yaml`) baked into the sandbox image. The real API key is passed to the supervisor via `openshell sandbox create --env NVIDIA_API_KEY=...` and the sandbox process only has a placeholder.
 
-1. The egress proxy intercepts the HTTPS CONNECT to `inference.local`
-2. The proxy looks up the configured provider and injects the API key as a Bearer token
-3. The request is forwarded to `integrate.api.nvidia.com` with the credential attached
+When the agent makes an inference request (LLM or embedding):
+
+1. The supervisor intercepts the HTTPS connection to `inference.local`
+2. It matches the request against the routes file (chat completions or embeddings)
+3. It injects the API key and forwards the request to `integrate.api.nvidia.com`
 4. The agent never sees the API key — even if compromised, there is nothing to exfiltrate
+5. The egress policy blocks direct access to `integrate.api.nvidia.com` as a defense-in-depth measure
 
 This pattern follows OpenShell's recommendation: *"Do not add inference provider hosts to `network_policies`. Use OpenShell inference routing instead."*
 
@@ -464,6 +472,8 @@ Tavily uses a direct endpoint with its API key in the sandbox environment becaus
 | `SSL: CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain` | The agent process doesn't trust the OpenShell egress proxy's ephemeral CA | Run `make start-agent` which creates the combined CA bundle automatically. If starting manually, see the TLS inspection section above. |
 | `403 Forbidden` from the egress proxy | The agent process is running in the pod's root network namespace instead of the sandbox namespace | Ensure the agent is started via `nsenter --net=/proc/<sleep_pid>/ns/net` (handled by `start-sandbox.sh`). Do not use plain `oc exec` to run the entrypoint. |
 | Image pull timeout during sandbox creation | Container registry (quay.io) is temporarily unavailable or slow | Delete the sandbox (`openshell sandbox delete aiq-sandbox`) and recreate. The pod will retry image pulls automatically with exponential backoff. |
+| `403 - connection not allowed by policy` on document upload/embeddings | Supervisor version too old (< 0.0.63) — embedding routing not supported | Upgrade to chart version `0.0.0-dev` with `--set image.tag=dev --set supervisor.image.tag=dev`. Embedding routing via `inference.local` requires supervisor ≥ 0.0.63. |
+| `410 Gone — model has reached end of life` on embeddings | Embedding model in `config/inference-routes.yaml` is deprecated | Update the `model` field in the `openai_embeddings` route to the current model (e.g. `nvidia/llama-nemotron-embed-vl-1b-v2`), rebuild and push the image, then recreate the sandbox. |
 | `address already in use` on port 8000 | Both the TCP proxy and agent are trying to bind port 8000 in the same namespace | The TCP proxy must run in the root namespace (via `oc exec`) and the agent in the sandbox namespace (via `nsenter`). Check `ss -tlnp` inside the pod to verify. |
 
 ## Tags

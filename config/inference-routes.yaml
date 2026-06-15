@@ -1,0 +1,31 @@
+# Standalone inference routes for the AIQ research agent sandbox.
+#
+# Loaded by the openshell-sandbox supervisor at startup via the
+# OPENSHELL_INFERENCE_ROUTES env var. Routes both LLM chat and embedding
+# traffic through inference.local so the NVIDIA API key never needs to
+# enter the sandboxed process's environment.
+#
+# The supervisor resolves api_key_env from its own container environment
+# (passed via `openshell sandbox create --env NVIDIA_API_KEY=...`).
+# The sandbox process cannot use the key directly because the egress
+# policy blocks integrate.api.nvidia.com.
+
+routes:
+  - name: inference.local
+    endpoint: https://integrate.api.nvidia.com/v1
+    model: nvidia/nemotron-3-nano-30b-a3b
+    provider_type: nvidia
+    protocols:
+      - openai_chat_completions
+      - openai_completions
+      - openai_responses
+      - model_discovery
+    api_key_env: NVIDIA_API_KEY
+
+  - name: inference.local
+    endpoint: https://integrate.api.nvidia.com/v1
+    model: nvidia/llama-nemotron-embed-vl-1b-v2
+    provider_type: nvidia
+    protocols:
+      - openai_embeddings
+    api_key_env: NVIDIA_API_KEY
