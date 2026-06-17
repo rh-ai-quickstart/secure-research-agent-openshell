@@ -83,6 +83,24 @@ else
 fi
 ```
 
+**Validate `.openshell.env`** — confirm critical variables are present before
+proceeding. If any are missing the file is likely stale or hand-edited; delete
+it and re-run the block above to regenerate from the current template.
+
+```bash
+MISSING=""
+grep -q "^AIQ_EMBED_BASE_URL=https://inference.local/v1" .openshell.env || MISSING="${MISSING} AIQ_EMBED_BASE_URL"
+grep -q "^SSL_CERT_FILE=" .openshell.env                                || MISSING="${MISSING} SSL_CERT_FILE"
+grep -q "^REQUESTS_CA_BUNDLE=" .openshell.env                           || MISSING="${MISSING} REQUESTS_CA_BUNDLE"
+grep -q "^CONFIG_FILE=" .openshell.env                                  || MISSING="${MISSING} CONFIG_FILE"
+if [ -n "${MISSING}" ]; then
+  echo "ERROR: .openshell.env is missing required variables:${MISSING}"
+  echo "Delete .openshell.env and re-run the template copy step above."
+  exit 1
+fi
+echo ".openshell.env validated — all required variables present."
+```
+
 ## Phase 1 — OpenShell Gateway
 
 ### Step 1 — Verify cluster login
@@ -319,6 +337,32 @@ oc exec "${SANDBOX_NAME}" -n "${NAMESPACE}" -c agent -- \
 ```
 
 Wait for `Uvicorn running on http://0.0.0.0:8000` in the output.
+
+### Step 13b — Verify sandbox environment
+
+Before proceeding to validation, confirm the sandbox sourced the correct
+environment. Both `NVIDIA_API_KEY` and `AIQ_EMBED_BASE_URL` must be set.
+`NVIDIA_API_KEY` should show the placeholder (the real key is injected by the
+supervisor at inference time). `AIQ_EMBED_BASE_URL` **must** be
+`https://inference.local/v1` — if it is empty, embeddings will bypass
+credential isolation and fail with `403`.
+
+```bash
+oc exec "${SANDBOX_NAME}" -n "${NAMESPACE}" -c agent -- \
+  bash -c 'nsenter --net="/proc/$(ps -eo pid,comm --no-headers | grep sleep | head -1 | awk "{print \$1}")/ns/net" -- \
+  bash -c "set -a; source /sandbox/.env; set +a; echo NVIDIA_API_KEY=\$NVIDIA_API_KEY; echo AIQ_EMBED_BASE_URL=\$AIQ_EMBED_BASE_URL"'
+```
+
+Expected output:
+```
+NVIDIA_API_KEY=credential-managed-by-openshell-gateway
+AIQ_EMBED_BASE_URL=https://inference.local/v1
+```
+
+If `AIQ_EMBED_BASE_URL` is empty or missing, the `/sandbox/.env` was not
+generated from the current template. Fix by deleting the stale `.openshell.env`
+locally, regenerating it from `config/openshell.env.template` (Step 0), and
+re-copying it into the sandbox (Step 10). Then restart the agent (Step 13).
 
 ## Phase 4 — Validation
 
