@@ -2,7 +2,7 @@ NAMESPACE ?= openshell
 NVIDIA_API_KEY ?=
 TAVILY_API_KEY ?=
 RELEASE_NAME ?= secure-research-agent
-OPENSHELL_CHART_VERSION ?= 0.0.48
+OPENSHELL_CHART_VERSION ?= 0.0.0-dev
 
 REGISTRY ?= quay.io/rh-ai-quickstart
 
@@ -46,6 +46,8 @@ install: ## Deploy everything (CRDs + OpenShell gateway + AIQ sandbox + UI)
 	helm install openshell oci://ghcr.io/nvidia/openshell/helm-chart \
 		--version $(OPENSHELL_CHART_VERSION) \
 		-n $(NAMESPACE) \
+		--set image.tag=dev \
+		--set supervisor.image.tag=dev \
 		--set pkiInitJob.enabled=false \
 		--set server.disableTls=true \
 		--set server.auth.allowUnauthenticatedUsers=true \
