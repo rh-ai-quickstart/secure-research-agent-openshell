@@ -34,7 +34,7 @@ ui:
 
 # OpenShell gateway (deployed via subchart)
 openshell:
-  chartVersion: "0.0.48"
+  chartVersion: "0.0.0-dev"
   gateway:
     resources:
       requests:
