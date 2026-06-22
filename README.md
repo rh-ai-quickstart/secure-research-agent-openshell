@@ -6,7 +6,6 @@ Run autonomous AI research agents inside policy-enforced sandboxes on OpenShift,
 
 - [Overview](#overview)
 - [Detailed description](#detailed-description)
-  - [See it in action](#see-it-in-action)
   - [Architecture](#architecture)
 - [Requirements](#requirements)
   - [Minimum hardware requirements](#minimum-hardware-requirements)
@@ -40,10 +39,6 @@ Autonomous AI agents introduce a new class of security challenges. Unlike tradit
 NVIDIA OpenShell addresses this by wrapping agent workloads in sandboxes with five layers of kernel-enforced security: network namespace isolation, Landlock filesystem restrictions, per-binary network policy with SHA-256 verification, TLS inspection via ephemeral CA, and credential isolation through an inference routing proxy. The agent runs the same code, the same way — but OpenShell wraps it with security guardrails that are transparent to the application. See [docs/security-layers.md](docs/security-layers.md) for a detailed breakdown of each layer.
 
 This quickstart deploys a complete research agent stack — NVIDIA AIQ with Dask parallel computing, a FastAPI async API, ChromaDB knowledge storage, and a Next.js UI — inside an OpenShell sandbox on OpenShift. The agent can perform deep and shallow research using NVIDIA NIM LLMs and Tavily web search, ingest documents into a knowledge base, and stream results via SSE. All of this runs within strict security boundaries — LLM credentials are isolated at the gateway and never enter the sandbox, and only explicitly allowed API endpoints are reachable.
-
-### See it in action
-
-<!-- TODO: Add Arcade demo or video link when available -->
 
 ### Architecture
 
@@ -358,6 +353,8 @@ oc delete project $NAMESPACE
 │   │   └── SKILL.md
 │   └── deploy-aiq-openshell/       # Full-stack AIQ + OpenShell deployment
 │       └── SKILL.md
+├── .github/workflows/
+│   └── ci.yaml                   # CI pipeline (lint, test, helm lint)
 ├── chart/                        # Helm chart for OpenShift deployment
 │   ├── Chart.yaml                # Chart metadata and dependencies
 │   ├── values.yaml               # Default configuration (images, API keys, resources)
@@ -379,9 +376,12 @@ oc delete project $NAMESPACE
 ├── scripts/
 │   ├── tcp-proxy.py              # Network namespace bridge (root NS → sandbox NS)
 │   └── start-sandbox.sh          # Sandbox initialization and agent startup
+├── tests/                        # Automated test suite
+│   ├── test_tcp_proxy.py         # TCP proxy unit tests (asyncio)
+│   └── test_helm_chart.py        # Helm chart lint and template validation
 ├── Containerfile                 # AIQ sandbox image (Ubuntu 24.04 + Python 3.12)
 ├── Containerfile.ui              # Next.js UI image
-├── Makefile                      # Build, deploy, validate, cleanup automation
+├── Makefile                      # Build, deploy, lint, test, validate, cleanup
 ├── docs/
 │   ├── architecture-overview.png # Architecture diagram
 │   └── security-layers.md        # Five security layers explained
