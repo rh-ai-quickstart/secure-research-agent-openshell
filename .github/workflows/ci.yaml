@@ -30,11 +30,11 @@ jobs:
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Containerfile
-          failure-threshold: warning
+          failure-threshold: error
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Containerfile.ui
-          failure-threshold: warning
+          failure-threshold: error
 
   helm-lint:
     runs-on: ubuntu-latest

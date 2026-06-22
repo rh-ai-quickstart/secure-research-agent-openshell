@@ -26,6 +26,7 @@ NAMESPACE="${1:-openshell}"
 SANDBOX_POD="aiq-sandbox"
 
 get_sandbox_pid() {
+    # shellcheck disable=SC2016
     oc exec "${SANDBOX_POD}" -n "${NAMESPACE}" -c agent -- \
         bash -c 'ps -eo pid,comm --no-headers | grep "sleep" | head -1 | awk "{print \$1}"' 2>/dev/null | tr -d '[:space:]'
 }
@@ -96,6 +97,7 @@ echo "NVIDIA API key: isolated at gateway (not in sandbox)"
 echo "Starting agent via nsenter into sandbox network namespace..."
 echo ""
 
+# shellcheck disable=SC2016
 oc exec "${SANDBOX_POD}" -n "${NAMESPACE}" -c agent -- \
-    nsenter --net=/proc/${SLEEP_PID}/ns/net -- \
+    nsenter --net="/proc/${SLEEP_PID}/ns/net" -- \
     bash -c 'set -a; source /sandbox/.env; set +a; export PATH="/app/.venv/bin:$PATH"; python /app/deploy/entrypoint.py'
