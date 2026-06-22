@@ -86,6 +86,17 @@ start-agent: ## Start the AIQ agent inside the sandbox
 	@chmod +x scripts/start-sandbox.sh
 	./scripts/start-sandbox.sh $(NAMESPACE)
 
+## ── Quality ───────────────────────────────────────────────
+
+lint: ## Run linters (ruff, shellcheck, helm lint)
+	ruff check scripts/
+	ruff format --check scripts/
+	shellcheck scripts/*.sh || echo "shellcheck not installed — skipping"
+	helm lint chart/
+
+test: ## Run test suite (pytest + helm lint)
+	python -m pytest tests/ -v
+
 ## ── Validate ───────────────────────────────────────────────
 
 status: ## Show pod status and routes

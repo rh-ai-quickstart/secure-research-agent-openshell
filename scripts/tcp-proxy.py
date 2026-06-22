@@ -10,6 +10,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import sys
 
 LISTEN_HOST = "0.0.0.0"
@@ -36,10 +37,8 @@ async def handle(reader, writer):
         except Exception:
             pass
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 w.close()
-            except Exception:
-                pass
 
     await asyncio.gather(pipe(reader, tw), pipe(tr, writer))
 
