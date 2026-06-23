@@ -144,7 +144,7 @@ There are two deployment approaches:
 
 **Option A — AI-agent-driven (skill-based):**
 
-Point your AI coding agent (Cursor, Claude, etc.) at the project and ask it to deploy. The agent will discover and follow the deployment skill at `.cursor/skills/deploy-aiq-openshell/SKILL.md`, which covers the full stack end to end. A separate skill for gateway-only deployment is available at `.cursor/skills/deploy-openshell-openshift/SKILL.md`.
+Point your AI coding agent at the project and ask it to deploy. The agent will discover and follow the deployment skill at `skills/deploy-aiq-openshell/SKILL.md`, which covers the full stack end to end. A separate skill for gateway-only deployment is available at `skills/deploy-openshell-openshift/SKILL.md`. Multi-client support (Cursor, Claude Code, Gemini, Codex) is provided via `AGENTS.md` and `make skills-sync`.
 
 **Option B — Makefile (manual/scripted):**
 
@@ -348,10 +348,10 @@ oc delete project $NAMESPACE
 
 ```
 .
-├── .cursor/skills/               # AI agent deployment skills
-│   ├── deploy-openshell-openshift/  # Gateway-only deployment on OpenShift
+├── skills/                       # Canonical skill definitions (multi-client)
+│   ├── deploy-aiq-openshell/       # Full-stack AIQ + OpenShell deployment
 │   │   └── SKILL.md
-│   └── deploy-aiq-openshell/       # Full-stack AIQ + OpenShell deployment
+│   └── deploy-openshell-openshift/ # Gateway-only deployment on OpenShift
 │       └── SKILL.md
 ├── .github/workflows/
 │   └── ci.yaml                   # CI pipeline (lint, test, helm lint)
@@ -375,13 +375,17 @@ oc delete project $NAMESPACE
 │   └── openshell.env.template    # Environment variable template
 ├── scripts/
 │   ├── tcp-proxy.py              # Network namespace bridge (root NS → sandbox NS)
-│   └── start-sandbox.sh          # Sandbox initialization and agent startup
+│   ├── start-sandbox.sh          # Sandbox initialization and agent startup
+│   └── sync-skills.sh            # Sync skills to AI client directories
 ├── tests/                        # Automated test suite
 │   ├── test_tcp_proxy.py         # TCP proxy unit tests (asyncio)
 │   └── test_helm_chart.py        # Helm chart lint and template validation
+├── AGENTS.md                     # Agent guidelines (Codex reads directly)
+├── CLAUDE.md                     # Claude Code entry point → AGENTS.md
+├── GEMINI.md                     # Gemini entry point → AGENTS.md
 ├── Containerfile                 # AIQ sandbox image (Ubuntu 24.04 + Python 3.12)
 ├── Containerfile.ui              # Next.js UI image
-├── Makefile                      # Build, deploy, lint, test, validate, cleanup
+├── Makefile                      # Build, deploy, lint, test, skills-sync
 ├── docs/
 │   ├── architecture-overview.png # Architecture diagram
 │   └── security-layers.md        # Five security layers explained

@@ -6,7 +6,7 @@ OPENSHELL_CHART_VERSION ?= 0.0.0-dev
 
 REGISTRY ?= quay.io/rh-ai-quickstart
 
-.PHONY: help install uninstall start-agent validate build-images push-images status clean
+.PHONY: help install uninstall start-agent validate build-images push-images status clean lint test skills-sync
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -135,3 +135,8 @@ uninstall: ## Remove everything
 
 clean: ## Remove local build artifacts
 	-docker rmi aiq-openshell:local aiq-ui:local 2>/dev/null
+
+## ── Skills ────────────────────────────────────────────────
+
+skills-sync: ## Sync skills to all AI client directories (.cursor, .claude, .codex, .gemini)
+	@bash scripts/sync-skills.sh
