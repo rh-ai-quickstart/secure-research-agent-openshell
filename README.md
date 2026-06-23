@@ -17,6 +17,9 @@ Run autonomous AI research agents inside policy-enforced sandboxes on OpenShift,
   - [Validating the deployment](#validating-the-deployment)
   - [Delete](#delete)
 - [Repository structure](#repository-structure)
+- [Environment variables](#environment-variables)
+- [Development](#development)
+- [Contributing](#contributing)
 - [References](#references)
 - [Technical details](#technical-details)
   - [OpenShell security model](#openshell-security-model)
@@ -392,6 +395,109 @@ oc delete project $NAMESPACE
 ├── LICENSE                       # Apache 2.0
 └── README.md
 ```
+
+## Environment variables
+
+### Makefile / shell variables
+
+Set these in your terminal before running `make install`:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NAMESPACE` | OpenShift namespace for all resources | `openshell` |
+| `NVIDIA_API_KEY` | NVIDIA NIM API key ([build.nvidia.com](https://build.nvidia.com)) | *(required)* |
+| `TAVILY_API_KEY` | Tavily web search API key ([app.tavily.com](https://app.tavily.com)) | *(required)* |
+| `RELEASE_NAME` | Helm release name for the AIQ chart | `secure-research-agent` |
+| `OPENSHELL_CHART_VERSION` | OpenShell Helm chart version | `0.0.0-dev` |
+| `REGISTRY` | Container image registry for push targets | `quay.io/rh-ai-quickstart` |
+
+### Sandbox environment (`config/openshell.env.template`)
+
+These are injected into the sandbox pod via `.openshell.env`. Copy the template and fill in your Tavily key:
+
+```bash
+cp config/openshell.env.template .openshell.env
+# Edit .openshell.env — set TAVILY_API_KEY
+```
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NVIDIA_API_KEY` | Placeholder — real key is injected by the inference proxy | `credential-managed-by-openshell-gateway` |
+| `TAVILY_API_KEY` | Tavily API key (required — no proxy routing for this service) | *(must set)* |
+| `HTTP_PROXY` / `HTTPS_PROXY` | Egress proxy inside the sandbox namespace | `http://10.200.0.1:3128` |
+| `CONFIG_FILE` | Path to AIQ agent config inside sandbox | `/sandbox/config_openshell.yml` |
+| `AIQ_EMBED_BASE_URL` | Embedding endpoint (routes through credential isolation) | `https://inference.local/v1` |
+| `HOST` / `PORT` | Agent listen address | `0.0.0.0` / `8000` |
+| `SSL_CERT_FILE` | CA bundle trusting the egress proxy's ephemeral CA | `/sandbox/combined-ca-bundle.pem` |
+| `REQUESTS_CA_BUNDLE` | Same CA bundle for Python `requests` library | `/sandbox/combined-ca-bundle.pem` |
+| `NAT_JOB_STORE_DB_URL` | SQLite path for async job storage | `sqlite+aiosqlite:////sandbox/data/jobs.db` |
+| `AIQ_CHROMA_DIR` | ChromaDB persistence directory | `/sandbox/data/chroma_data` |
+
+## Development
+
+### Prerequisites
+
+- Python 3.12+ (for linting and tests)
+- [Helm](https://helm.sh/docs/intro/install/) 3.12+ (for chart validation)
+- [ruff](https://docs.astral.sh/ruff/installation/) (Python linter)
+- [shellcheck](https://www.shellcheck.net/) (optional — bash linter)
+
+### Local validation (no cluster required)
+
+You can validate most project artifacts without an OpenShift cluster:
+
+```bash
+# Lint Python scripts and check formatting
+make lint
+
+# Run the full test suite (TCP proxy unit tests + Helm chart validation)
+make test
+
+# Render Helm templates locally to inspect output
+helm template test-release chart/
+
+# Validate the egress policy YAML
+python3 -c "import yaml; yaml.safe_load(open('config/policy-egress.yaml'))"
+```
+
+### Running tests
+
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio
+
+# Run all tests
+make test
+
+# Run a specific test file
+pytest tests/test_tcp_proxy.py -v
+pytest tests/test_helm_chart.py -v
+```
+
+### Pre-commit hooks
+
+Install pre-commit hooks to catch issues before pushing:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This runs ruff (Python lint + format), shellcheck (bash), and hadolint (Containerfiles) on every commit.
+
+## Contributing
+
+1. Fork the repository and create a feature branch
+2. Make your changes
+3. Run `make lint && make test` — both must pass
+4. Submit a pull request against `main`
+
+### What to watch for
+
+- **Egress policy changes** (`config/policy-egress.yaml`) — Adding endpoints affects the security posture; document the reason
+- **Inference routes** (`config/inference-routes.yaml`) — These are baked into the container image; changes require a rebuild and sandbox recreation
+- **Containerfile changes** — The image is built from an external AIQ source tree; `sed` patches in the build layer are fragile and should be minimized
+- **start-sandbox.sh** — This script runs privileged operations (`nsenter`, `oc exec`); test on a real cluster before merging
 
 ## References
 
